@@ -24,7 +24,10 @@ async function rafraichirPage(cache) {
   if (a !== b) {
     await cache.put("index.html", rep.clone());
     await cache.put("./", rep.clone());
-    if (a !== null) prevenir();
+    if (a !== null) {
+      await new Promise(r => setTimeout(r, 2000)); // laisse à la page le temps de s'ouvrir avant de la prévenir
+      await prevenir();
+    }
   }
   return rep;
 }

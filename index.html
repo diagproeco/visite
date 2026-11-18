@@ -22,7 +22,13 @@
   header button { background:rgba(255,255,255,.18); color:#fff; border:0; border-radius:8px; padding:8px 12px; font-size:15px; }
   main { padding:14px 14px calc(120px + env(safe-area-inset-bottom, 0px)); max-width:720px; margin:0 auto; }
   .btn { display:block; width:100%; border:0; border-radius:10px; padding:14px; font-size:17px; font-weight:600; margin:8px 0; background:var(--vert); color:#fff; }
+  .btn .sous { display:block; font-weight:400; font-size:13px; opacity:.92; margin-top:2px; }
   .btn.sec { background:var(--gris); color:var(--texte); border:1px solid var(--bord); }
+  details.repli { border:1px solid var(--bord); border-radius:12px; margin:12px 0; background:#fff; }
+  details.repli summary { padding:12px 14px; font-weight:600; cursor:pointer; }
+  details.repli[open] summary { border-bottom:1px solid var(--bord); }
+  details.repli > div { margin-left:10px; margin-right:10px; }
+  .compte { font-weight:400; color:#5b636e; font-size:14px; margin-left:8px; white-space:nowrap; }
   .btn.danger { background:#fff; color:var(--rouge); border:1px solid var(--rouge); font-weight:500; }
   .carte { border:1px solid var(--bord); border-radius:12px; padding:12px 14px; margin:10px 0; background:#fff; cursor:pointer; }
   .carte .t { font-weight:600; font-size:18px; }
@@ -34,6 +40,7 @@
   .carte.q input[type=text], .carte.q textarea { margin-top:6px; }
   .carte.q textarea { min-height:110px; }
   .etiq { display:inline-block; background:var(--vert); color:#fff; font-size:12px; font-weight:600; border-radius:6px; padding:2px 7px; vertical-align:middle; margin-left:6px; }
+  .etiq.ap { background:#6b7480; }
   .grand { font-weight:600; font-size:19px; margin:6px 0 2px; }
   .note { color:#5b636e; font-size:14px; margin:6px 0; }
   input[type=text], input[type=date], textarea { width:100%; font-size:17px; padding:12px; border:1px solid var(--bord); border-radius:10px; font-family:inherit; color:var(--texte); background:#fff; -webkit-appearance:none; appearance:none; }
@@ -88,7 +95,7 @@
 <input type="file" id="cameraPlan" accept="image/*" capture="environment" class="cache">
 
 <script>
-const VERSION = "6";
+const VERSION = "6.1";
 
 /* ---------- Où tourne l'appli ---------- */
 const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
@@ -185,6 +192,7 @@ const POINTS = [
     a: { d: "prix annoncé ou avis de valeur, documents remis" } }];
 // Ses titres de pathologies, une par zone (n : nom court sur la carte, t : son titre dans le rapport)
 const PATHOS = [
+  { c: "generale", n: "Pathologies générales", t: "Pathologies générales", general: true, a: "Toutes les pathologies à la suite, sans choisir de zone. Claude les range ensuite par zone." },
   { c: "toiture", n: "Toiture, charpente et zinguerie", t: "Au niveau de la toiture, de la charpente et de la zinguerie", a: "couverture, souche, forget et chevrons, toiture-terrasse, traces de fuite au plafond dessous, gouttières et descentes" },
   { c: "murs", n: "Murs, cloisons et façades", t: "Au niveau des murs, cloisons et façades", a: "fissures, humidité, enduit, pieds de façade, fondations apparentes, végétation" },
   { c: "plafonds", n: "Plafonds", t: "Au niveau des plafonds", a: "" },
@@ -222,7 +230,11 @@ const QUESTIONS = [
   { c: "consentement", q: "Consentement", ch: ["Signé", "Refus", "Dispense"] },
   { c: "vente", q: "Audit réalisé dans le cadre d'une vente", ch: ["Oui", "Non"] },
   { c: "documents", q: "Documents remis", multi: true, ch: ["Plans", "Plan de masse", "Carrez/Boutin", "Taxe d'habitation", "Relevé de propriété", "Contrat d'entretien", "Notices", "Permis de construire", "Étude thermique", "Infiltrométrie", "Factures", "Aucun"] }];
-const RUBRIQUES_LIBRES = ["Travaux et mesures", "Commentaires et particularités"];
+// Cases générales de l'audit : une par sujet, sans choisir de poste, de zone ni de pièce
+const GENERAUX = [
+  { c: "travaux", n: "Travaux et mesures", a: "Les travaux à recommander, avec tes mesures, sans choisir de poste." },
+  { c: "induits", n: "Travaux induits", suite: " (à ranger par poste)", a: "Tous les travaux induits à la suite, sans choisir de poste. Claude les range ensuite." },
+  { c: "commentaires", n: "Commentaires et particularités", a: "Particularités du bâtiment, déclarations du propriétaire, choix du scénario." }];
 
 const z2 = n => String(n).padStart(2, "0");
 const isoDe = d => `${d.getFullYear()}-${z2(d.getMonth() + 1)}-${z2(d.getDate())}`;
@@ -246,12 +258,18 @@ const aidePoint = (pt, type) => pt.a[type] || pt.a.d;
 function nomDe(p, v) {
   if (p.genre === "point") { const pt = POINTS.find(x => x.c === p.cle); if (pt) return titrePoint(pt, v.typeMaison); }
   if (p.genre === "patho") { const z = PATHOS.find(x => x.c === p.cle); if (z) return z.t; }
+  if (p.genre === "general") { const g = GENERAUX.find(x => x.c === p.cle); if (g) return g.n; }
   return p.nom;
 }
 function aideDe(p, v) {
   if (p.genre === "point") { const pt = POINTS.find(x => x.c === p.cle); return pt ? "À dire : " + aidePoint(pt, v.typeMaison) + "." : ""; }
-  if (p.genre === "patho") { const z = PATHOS.find(x => x.c === p.cle); return (z && z.a ? "À dire : " + z.a + ". " : "") + "2 à 4 photos, les plus parlantes."; }
+  if (p.genre === "patho") {
+    const z = PATHOS.find(x => x.c === p.cle);
+    if (z && z.general) return "Dicte toutes les pathologies à la suite, sans choisir de zone : Claude les range ensuite par zone. Dis à quoi correspond chaque photo.";
+    return (z && z.a ? "À dire : " + z.a + ". " : "") + "2 à 4 photos, les plus parlantes.";
+  }
   if (p.genre === "vrac") return "Dicte tout à la suite, sans ordre. Dis à quoi correspond chaque photo.";
+  if (p.genre === "general") { const g = GENERAUX.find(x => x.c === p.cle); return g ? g.a + " Dis à quoi correspond chaque photo." : ""; }
   return "";
 }
 
@@ -278,6 +296,7 @@ function liberer(zone) {
 let historiqueOk = true, etatMemoire = { e: "visites", n: 0 };
 try { history.scrollRestoration = "manual"; } catch (e) {}
 const defilement = {}; // où on en était dans les listes, pour y revenir
+const replis = {};     // aides de l'audit ouvertes ou repliées
 const cleDefilement = s => s.e === "visite" ? "v:" + s.v : s.e;
 function etatActuel() {
   return (historiqueOk && history.state && history.state.e) ? history.state : etatMemoire;
@@ -352,6 +371,15 @@ function majBandeau() {
   z.innerHTML = majPrete ? `<div class="alerte">Une nouvelle version de l'appli est arrivée.<button class="btn" id="mettreAJour">Mettre à jour maintenant</button></div>` : "";
   if (majPrete) document.getElementById("mettreAJour").onclick = () => location.reload();
 }
+async function verifierMaj() {
+  if (!EN_LIGNE || majPrete || !("caches" in window)) return;
+  try {
+    const gardee = await caches.match("index.html");
+    if (!gardee) return;
+    const m = /const VERSION = "([^"]+)"/.exec(await gardee.text());
+    if (m && m[1] !== VERSION) { majPrete = true; majBandeau(); }
+  } catch (e) {}
+}
 function majHorsReseau() {
   if (!EN_LIGNE || !("serviceWorker" in navigator)) return;
   navigator.serviceWorker.ready.then(() => {
@@ -364,6 +392,7 @@ if (EN_LIGNE && "serviceWorker" in navigator) {
   navigator.serviceWorker.addEventListener("message", e => {
     if (e.data && e.data.type === "maj") { majPrete = true; majBandeau(); }
   });
+  setTimeout(verifierMaj, 5000);
 }
 
 /* ---------- Écran : liste des visites ---------- */
@@ -380,11 +409,11 @@ async function ecranVisites() {
     <label class="l">Nouvelle visite : numéro de dossier ou nom</label>
     <input type="text" id="numDossier" placeholder="ex. 0211261163">
     <div class="ok" id="manque" style="color:var(--rouge)"></div>
-    <button class="btn" id="creer">Commencer : amiante / plomb</button>
-    <button class="btn" id="creerAudit">Commencer : audit énergétique</button>
+    <button class="btn" id="creer">Commencer : amiante / plomb<span class="sous">par pièce, avec le plan lettré</span></button>
+    <button class="btn" id="creerAudit">Commencer : audit énergétique<span class="sous">sans pièces : travaux, travaux induits, pathologies</span></button>
     <div id="liste"></div>
     <div class="version">Version ${VERSION} - ${EN_LIGNE ? (estInstallee() ? "appli installée" : "page internet") : "fichier"}</div>`;
-  majBandeau(); majInstall(); majHorsReseau();
+  majBandeau(); majInstall(); majHorsReseau(); verifierMaj();
   const caseCopie = document.getElementById("copie");
   if (caseCopie) {
     caseCopie.checked = copieActive();
@@ -400,7 +429,7 @@ async function ecranVisites() {
       : `${nbPlans ? nbPlans + " plan(s)" : "pas de plan"}, ${v.pieces.length} pièce(s), ${nbPhotos} photo(s)`;
     const c = document.createElement("div");
     c.className = "carte";
-    c.innerHTML = `<div class="t">${esc(v.dossier)}${audit ? '<span class="etiq">Audit</span>' : ""}</div>
+    c.innerHTML = `<div class="t">${esc(v.dossier)}${audit ? '<span class="etiq">Audit</span>' : '<span class="etiq ap">Amiante / plomb</span>'}</div>
       <div class="s">${detail} - ${new Date(v.cree).toLocaleDateString("fr-FR")}${v.envoye ? " - envoyée" : ""}</div>`;
     c.onclick = () => aller({ e: "visite", v: v.id });
     liste.appendChild(c);
@@ -425,7 +454,7 @@ async function ecranVisite(id) {
   visite = await lire("visites", id);
   if (!visite) { poser({ e: "visites", n: 0 }, true); return ecranVisites(); }
   visite.plans = visite.plans || [];
-  titre.textContent = visite.dossier + (estAudit(visite) ? " - Audit" : "");
+  titre.textContent = visite.dossier + (estAudit(visite) ? " - Audit" : " - Amiante / plomb");
   retour.classList.remove("cache"); retour.onclick = retourParent;
   liberer(vue);
   if (estAudit(visite)) rendreAudit(); else rendreAmiante();
@@ -488,6 +517,14 @@ function cartePiece(p) {
 function rendreAudit() {
   const v = visite;
   v.questions = v.questions || {};
+  // Une rubrique libre de la version 6 qui porte le nom d'une case générale devient cette case
+  let reprise = false;
+  v.pieces.forEach(p => {
+    if (p.genre && p.genre !== "libre") return;
+    const g = GENERAUX.find(x => x.n === p.nom);
+    if (g && !v.pieces.some(q => q.genre === "general" && q.cle === g.c)) { p.genre = "general"; p.cle = g.c; reprise = true; }
+  });
+  if (reprise) ecrire("visites", v);
   vue.innerHTML = `
     <label class="l">Type de maison</label>
     <div class="grille puces" id="types"></div>
@@ -495,19 +532,27 @@ function rendreAudit() {
     <label class="l">Date de la visite</label>
     <input type="date" id="dateVisite" value="${esc(dateVisiteDe(v))}">
     <div class="note" id="limite"></div>
-    <label class="l">Dictée libre</label>
+    <label class="l">Dictée générale</label>
+    <div class="note">Rien à choisir : une case par sujet, ou tout en vrac. Claude range ensuite.</div>
     <div id="vrac"></div>
-    <label class="l">Les 10 points à voir sur place</label>
-    <div class="note" id="notePoints"></div>
-    <div id="points"></div>
-    <label class="l">Pathologies par zone</label>
-    <div id="pathos"></div>
+    <div id="generales"></div>
+    <label class="l">Aides, si tu veux</label>
+    <details class="repli" id="secPoints">
+      <summary>Aide-mémoire : les 10 points à voir<span class="compte" id="nbPoints"></span></summary>
+      <div class="note" id="notePoints">Dix points pour ne rien oublier. Ce que tu ne dictes pas, Claude te le demandera.</div>
+      <div id="points"></div>
+    </details>
+    <details class="repli" id="secPathos">
+      <summary>Pathologies rangées par zone<span class="compte" id="nbPathos"></span></summary>
+      <div class="note">Seulement si tu préfères les ranger toi-même.</div>
+      <div id="pathos"></div>
+    </details>
     <label class="l">Questions du dossier</label>
     <div id="cQuestions"></div>
-    <label class="l">Autres rubriques</label>
+    <label class="l">Tes rubriques</label>
+    <div class="note">Tu peux en créer autant que tu veux, avec le nom que tu veux.</div>
     <div id="pieces"></div>
-    <div class="grille" id="choix"></div>
-    <input type="text" id="autreNom" placeholder="Autre nom de rubrique">
+    <input type="text" id="autreNom" placeholder="Nom de ta rubrique">
     <button class="btn sec" id="ajAutre">Ajouter cette rubrique</button>
     <label class="l">Plan ou croquis (facultatif)</label>
     <div id="infoPlan"></div>
@@ -557,12 +602,27 @@ function rendreAudit() {
     zone.appendChild(c);
   };
   carteFixe(document.getElementById("vrac"), "vrac", "vrac", "Tout en vrac", "Dicte tout à la suite, comme d'habitude. Claude fait le tri.");
+  const zg = document.getElementById("generales");
+  const pathoGenerale = PATHOS.find(z => z.general);
+  const general = c => { const g = GENERAUX.find(x => x.c === c); carteFixe(zg, "general", g.c, g.n, g.a); };
+  general("travaux"); general("induits");
+  carteFixe(zg, "patho", pathoGenerale.c, pathoGenerale.n, pathoGenerale.a);
+  general("commentaires");
   const zp = document.getElementById("points");
   POINTS.forEach(pt => carteFixe(zp, "point", pt.c, titrePoint(pt, v.typeMaison), aidePoint(pt, v.typeMaison)));
   const nbPoints = POINTS.filter(pt => { const p = v.pieces.find(x => x.genre === "point" && x.cle === pt.c); return !!p && rempli(p); }).length;
-  document.getElementById("notePoints").textContent = nbPoints + " point(s) sur 10 déjà dicté(s). Tu peux aussi tout dicter en vrac : Claude te demandera ce qui manque.";
   const zz = document.getElementById("pathos");
-  PATHOS.forEach(z => carteFixe(zz, "patho", z.c, z.n, z.a || "Ce que tu constates"));
+  const zones = PATHOS.filter(z => !z.general);
+  zones.forEach(z => carteFixe(zz, "patho", z.c, z.n, z.a || "Ce que tu constates"));
+  const nbZones = zones.filter(z => { const p = v.pieces.find(x => x.genre === "patho" && x.cle === z.c); return !!p && rempli(p); }).length;
+  document.getElementById("nbPoints").textContent = nbPoints + " sur 10";
+  document.getElementById("nbPathos").textContent = nbZones + " sur 9";
+  // Repliées au départ ; elles restent comme il les a laissées, et s'ouvrent seules s'il y a déjà dicté
+  [["secPoints", nbPoints], ["secPathos", nbZones]].forEach(([id, nb]) => {
+    const d = document.getElementById(id), cle = v.id + ":" + id;
+    d.open = cle in replis ? replis[cle] : nb > 0;
+    d.ontoggle = () => { replis[cle] = d.open; };
+  });
   const nbQ = QUESTIONS.filter(q => q.c).length;
   const nbR = QUESTIONS.filter(q => q.c && repondu(v.questions[q.c])).length;
   const cq = document.createElement("div");
@@ -576,12 +636,6 @@ function rendreAudit() {
     const deja = v.pieces.find(p => (!p.genre || p.genre === "libre") && p.nom === nom);
     if (deja) aller({ e: "piece", v: v.id, p: deja.id }); else ajouterPiece(nom, "libre");
   };
-  const choix = document.getElementById("choix");
-  RUBRIQUES_LIBRES.forEach(n => {
-    const b = document.createElement("button");
-    b.textContent = n; b.onclick = () => ouvrirLibre(n);
-    choix.appendChild(b);
-  });
   document.getElementById("ajAutre").onclick = () => {
     const n = document.getElementById("autreNom").value.trim();
     if (n) ouvrirLibre(n);
@@ -718,7 +772,7 @@ async function ecranPiece(vid, pid) {
   if (!piece) { poser({ e: "visite", v: vid, n: 0 }, true); return ecranVisite(vid); }
   const v = visite, pc = piece;
   const audit = estAudit(v);
-  const fixe = audit && (pc.genre === "point" || pc.genre === "patho" || pc.genre === "vrac");
+  const fixe = audit && (pc.genre === "point" || pc.genre === "patho" || pc.genre === "vrac" || pc.genre === "general");
   const nomAffiche = () => fixe ? nomDe(pc, v) : pc.nom;
   const aide = fixe ? aideDe(pc, v) : "";
   const rang = pc.genre === "point" ? POINTS.findIndex(x => x.c === pc.cle) : -1;
@@ -990,7 +1044,9 @@ async function preparerAudit() {
   }
   const rubrique = async (p) => {
     const nom = nomDe(p, v);
-    let bloc = `\n=== ${nom} ===\n${(p.texte || "").trim() || "(pas de dictée)"}\n`;
+    let suite = p.genre === "patho" && p.cle === "generale" ? " (à ranger par zone)" : "";
+    if (p.genre === "general") { const g = GENERAUX.find(x => x.c === p.cle); if (g && g.suite) suite = g.suite; }
+    let bloc = `\n=== ${nom}${suite} ===\n${(p.texte || "").trim() || "(pas de dictée)"}\n`;
     const noms = [];
     let i = 1;
     for (const phId of p.photos) {
@@ -1004,8 +1060,11 @@ async function preparerAudit() {
     return bloc;
   };
   const de = (genre, cle) => v.pieces.find(p => p.genre === genre && p.cle === cle);
-  const vrac = de("vrac", "vrac");
-  if (vrac && rempli(vrac)) texte += await rubrique(vrac);
+  const generales = [de("vrac", "vrac")].concat(GENERAUX.map(g => de("general", g.c))).filter(p => p && rempli(p));
+  if (generales.length) {
+    texte += `\n--- Dictée générale ---\n`;
+    for (const p of generales) texte += await rubrique(p);
+  }
   texte += `\n--- Les 10 points à voir sur place ---\n`;
   const sansDictee = [];
   for (const pt of POINTS) {
@@ -1014,8 +1073,8 @@ async function preparerAudit() {
   }
   if (sansDictee.length) texte += `\nPoints sans dictée : ${sansDictee.join(" ; ")}\n`;
   const pathos = PATHOS.map(z => de("patho", z.c)).filter(p => p && rempli(p));
-  texte += `\n--- Pathologies par zone ---\n`;
-  if (pathos.length) for (const p of pathos) texte += await rubrique(p); else texte += `(aucune pathologie rangée par zone)\n`;
+  texte += `\n--- Pathologies ---\n`;
+  if (pathos.length) for (const p of pathos) texte += await rubrique(p); else texte += `(aucune pathologie dictée dans cette partie)\n`;
   const libres = v.pieces.filter(p => !p.genre || p.genre === "libre");
   if (libres.length) {
     texte += `\n--- Autres rubriques ---\n`;
