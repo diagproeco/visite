@@ -28,6 +28,7 @@
   details.repli summary { padding:12px 14px; font-weight:600; cursor:pointer; }
   details.repli[open] summary { border-bottom:1px solid var(--bord); }
   details.repli > div { margin-left:10px; margin-right:10px; }
+  details.repli > .dedans { padding-bottom:10px; }
   .compte { font-weight:400; color:#5b636e; font-size:14px; margin-left:8px; white-space:nowrap; }
   .btn.danger { background:#fff; color:var(--rouge); border:1px solid var(--rouge); font-weight:500; }
   .carte { border:1px solid var(--bord); border-radius:12px; padding:12px 14px; margin:10px 0; background:#fff; cursor:pointer; }
@@ -95,7 +96,7 @@
 <input type="file" id="cameraPlan" accept="image/*" capture="environment" class="cache">
 
 <script>
-const VERSION = "6.1";
+const VERSION = "6.2";
 
 /* ---------- Où tourne l'appli ---------- */
 const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
@@ -256,12 +257,14 @@ const titrePoint = (pt, type) => (POINTS.indexOf(pt) + 1) + ". " + (pt.t[type] |
 const aidePoint = (pt, type) => pt.a[type] || pt.a.d;
 // Nom affiché d'une rubrique : les points et les pathologies gardent toujours leur titre
 function nomDe(p, v) {
+  if (p.genre === "dictee") return "Dictée de la visite";
   if (p.genre === "point") { const pt = POINTS.find(x => x.c === p.cle); if (pt) return titrePoint(pt, v.typeMaison); }
   if (p.genre === "patho") { const z = PATHOS.find(x => x.c === p.cle); if (z) return z.t; }
   if (p.genre === "general") { const g = GENERAUX.find(x => x.c === p.cle); if (g) return g.n; }
   return p.nom;
 }
 function aideDe(p, v) {
+  if (p.genre === "dictee") return "Dicte tout à la suite, en disant le nom de la pièce : « Dans le séjour, il y a… ». Claude range ensuite par pièce. Dis à quoi correspond chaque photo.";
   if (p.genre === "point") { const pt = POINTS.find(x => x.c === p.cle); return pt ? "À dire : " + aidePoint(pt, v.typeMaison) + "." : ""; }
   if (p.genre === "patho") {
     const z = PATHOS.find(x => x.c === p.cle);
@@ -409,7 +412,7 @@ async function ecranVisites() {
     <label class="l">Nouvelle visite : numéro de dossier ou nom</label>
     <input type="text" id="numDossier" placeholder="ex. 0211261163">
     <div class="ok" id="manque" style="color:var(--rouge)"></div>
-    <button class="btn" id="creer">Commencer : amiante / plomb<span class="sous">par pièce, avec le plan lettré</span></button>
+    <button class="btn" id="creer">Commencer : amiante / plomb<span class="sous">une seule dictée, avec le plan lettré</span></button>
     <button class="btn" id="creerAudit">Commencer : audit énergétique<span class="sous">sans pièces : travaux, travaux induits, pathologies</span></button>
     <div id="liste"></div>
     <div class="version">Version ${VERSION} - ${EN_LIGNE ? (estInstallee() ? "appli installée" : "page internet") : "fichier"}</div>`;
@@ -424,9 +427,13 @@ async function ecranVisites() {
     const audit = estAudit(v);
     const nbPhotos = v.pieces.reduce((n, p) => n + p.photos.length, 0);
     const nbPlans = (v.plans || []).length;
+    const dictee = v.pieces.find(p => p.genre === "dictee");
+    const dicteeFaite = !!dictee && rempli(dictee);
+    const nbPieces = v.pieces.filter(p => !p.genre).length;
+    const contenu = dicteeFaite ? (nbPieces ? `dictée + ${nbPieces} pièce(s)` : "dictée faite") : (nbPieces ? `${nbPieces} pièce(s)` : "pas encore de dictée");
     const detail = audit
       ? `${v.pieces.filter(rempli).length} rubrique(s), ${nbPhotos} photo(s)`
-      : `${nbPlans ? nbPlans + " plan(s)" : "pas de plan"}, ${v.pieces.length} pièce(s), ${nbPhotos} photo(s)`;
+      : `${nbPlans ? nbPlans + " plan(s)" : "pas de plan"}, ${contenu}, ${nbPhotos} photo(s)`;
     const c = document.createElement("div");
     c.className = "carte";
     c.innerHTML = `<div class="t">${esc(v.dossier)}${audit ? '<span class="etiq">Audit</span>' : '<span class="etiq ap">Amiante / plomb</span>'}</div>
@@ -475,21 +482,40 @@ async function ecranVisite(id) {
   if (ici.e === "visite" && ici.v === id) window.scrollTo(0, defilement["v:" + id] || 0);
 }
 
-/* Visite amiante / plomb : le plan lettré, puis les pièces */
+/* Visite amiante / plomb : une seule dictée pour toute la visite, le plan lettré, et les pièces pour qui préfère */
 function rendreAmiante() {
+  const v = visite;
+  const pieces = v.pieces.filter(p => !p.genre);
+  const dictee = v.pieces.find(p => p.genre === "dictee");
+  const fait = !!dictee && rempli(dictee);
+  let etat = "pas encore de dictée";
+  if (fait) {
+    const debut = (dictee.texte || "").trim();
+    etat = (dictee.photos.length ? dictee.photos.length + " photo(s)" : "") + (dictee.photos.length && debut ? " - " : "") + esc(debut.slice(0, 60)) + (debut.length > 60 ? "…" : "");
+  }
   vue.innerHTML = `
+    <label class="l">Dictée de la visite</label>
+    <div class="note">Une seule dictée pour tout le logement, sans rien choisir : « Dans le séjour, il y a… ». Claude range ensuite par pièce.</div>
+    <button class="btn" id="dicter">${fait ? "Continuer la dictée" : "Dicter la visite"}<span class="sous">${etat}</span></button>
     <label class="l">Plan lettré</label>
     <div id="infoPlan"></div>
     <div class="plans" id="plans"></div>
     <button class="btn sec" id="camPlan">Prendre le plan en photo</button>
     <button class="btn sec" id="ajPlan">Plan depuis la galerie</button>
-    <label class="l">Ajouter une pièce</label>
-    <div class="grille" id="choix"></div>
-    <input type="text" id="autreNom" placeholder="Autre nom de pièce">
-    <button class="btn sec" id="ajAutre">Ajouter ce nom</button>
-    <label class="l">Pièces de la visite</label>
-    <div id="pieces"></div>
+    <details class="repli" id="secPieces">
+      <summary>Pièce par pièce, si tu préfères<span class="compte" id="nbPieces"></span></summary>
+      <div class="dedans">
+        <div class="note">Seulement si tu veux une dictée et des photos séparées pour chaque pièce.</div>
+        <label class="l">Ajouter une pièce</label>
+        <div class="grille" id="choix"></div>
+        <input type="text" id="autreNom" placeholder="Autre nom de pièce">
+        <button class="btn sec" id="ajAutre">Ajouter ce nom</button>
+        <label class="l">Pièces de la visite</label>
+        <div id="pieces"></div>
+      </div>
+    </details>
     <button class="btn danger" id="suppVisite">Supprimer cette visite</button>`;
+  document.getElementById("dicter").onclick = () => ouvrirFixe("dictee", "dictee");
   const choix = document.getElementById("choix");
   PIECES.forEach(n => {
     const b = document.createElement("button");
@@ -501,8 +527,13 @@ function rendreAmiante() {
     if (n) ajouterPiece(n);
   };
   const lp = document.getElementById("pieces");
-  if (!visite.pieces.length) lp.innerHTML = `<div class="s">Aucune pièce pour l'instant.</div>`;
-  visite.pieces.forEach(p => lp.appendChild(cartePiece(p)));
+  if (!pieces.length) lp.innerHTML = `<div class="s">Aucune pièce pour l'instant.</div>`;
+  pieces.forEach(p => lp.appendChild(cartePiece(p)));
+  document.getElementById("nbPieces").textContent = pieces.length ? pieces.length + " pièce(s)" : "";
+  // Replié au départ ; ouvert tout seul quand la visite a déjà des pièces, et il reste comme on l'a laissé
+  const sec = document.getElementById("secPieces"), cle = v.id + ":secPieces";
+  sec.open = cle in replis ? replis[cle] : pieces.length > 0;
+  sec.ontoggle = () => { replis[cle] = sec.open; };
 }
 function cartePiece(p) {
   const c = document.createElement("div");
@@ -677,7 +708,7 @@ async function afficherPlans() {
   if (!zone || !visite) return;
   liberer(zone); zone.innerHTML = "";
   info.innerHTML = (visite.plans.length || estAudit(visite)) ? "" :
-    `<div class="alerte">Commence par prendre le plan en photo, avec les lettres des murs bien lisibles. Une photo par niveau.</div>`;
+    `<div class="alerte">Prends le plan en photo, avec les lettres des murs bien lisibles. Une photo par niveau.</div>`;
   for (const pl of visite.plans) {
     const ph = await lire("photos", pl.id);
     if (!ph) continue;
@@ -772,7 +803,8 @@ async function ecranPiece(vid, pid) {
   if (!piece) { poser({ e: "visite", v: vid, n: 0 }, true); return ecranVisite(vid); }
   const v = visite, pc = piece;
   const audit = estAudit(v);
-  const fixe = audit && (pc.genre === "point" || pc.genre === "patho" || pc.genre === "vrac" || pc.genre === "general");
+  const dicteeSeule = pc.genre === "dictee"; // la dictée unique d'une visite amiante / plomb
+  const fixe = dicteeSeule || (audit && (pc.genre === "point" || pc.genre === "patho" || pc.genre === "vrac" || pc.genre === "general"));
   const nomAffiche = () => fixe ? nomDe(pc, v) : pc.nom;
   const aide = fixe ? aideDe(pc, v) : "";
   const rang = pc.genre === "point" ? POINTS.findIndex(x => x.c === pc.cle) : -1;
@@ -790,14 +822,14 @@ async function ecranPiece(vid, pid) {
     ${aPlan ? `<button class="btn sec" id="voirPlan">${audit ? "Voir le plan" : "Voir le plan lettré"}</button>`
             : (audit ? "" : '<div class="alerte">Pas encore de plan : tu peux le prendre en photo depuis l’écran de la visite (bouton Retour).</div>')}
     <label class="l">Dictée (micro du clavier)</label>
-    <textarea id="texte" placeholder="${audit ? "Appuie sur le micro du clavier et dicte comme d'habitude" : "Appuie sur le micro du clavier et dicte comme d'habitude, avec les lettres des murs"}">${esc(pc.texte)}</textarea>
+    <textarea id="texte" placeholder="${audit ? "Appuie sur le micro du clavier et dicte comme d'habitude" : (dicteeSeule ? "Appuie sur le micro du clavier et dicte : « Dans le séjour, il y a… »" : "Appuie sur le micro du clavier et dicte comme d'habitude, avec les lettres des murs")}">${esc(pc.texte)}</textarea>
     <div class="ok" id="sauve"></div>
     <button class="btn sec" id="camPhoto">Prendre une photo</button>
     <button class="btn sec" id="ajPhoto">Photos depuis la galerie</button>
     <div class="photos" id="photos"></div>
     ${pointSuivant ? `<button class="btn" id="suivant">Point suivant : ${esc(titrePoint(pointSuivant, v.typeMaison))}</button>` : ""}
-    <button class="btn${pointSuivant ? " sec" : ""}" id="fini">${pointSuivant ? "Revenir à la liste" : (audit ? "Terminé" : "Pièce terminée")}</button>
-    <button class="btn danger" id="suppPiece">${fixe ? "Vider cette rubrique" : (audit ? "Supprimer cette rubrique" : "Supprimer cette pièce")}</button>`;
+    <button class="btn${pointSuivant ? " sec" : ""}" id="fini">${pointSuivant ? "Revenir à la liste" : (audit || dicteeSeule ? "Terminé" : "Pièce terminée")}</button>
+    <button class="btn danger" id="suppPiece">${dicteeSeule ? "Vider la dictée" : (fixe ? "Vider cette rubrique" : (audit ? "Supprimer cette rubrique" : "Supprimer cette pièce"))}</button>`;
   const ta = document.getElementById("texte");
   const sauve = document.getElementById("sauve");
   const champNom = document.getElementById("nomPiece");
@@ -1003,17 +1035,29 @@ async function preparer() {
   } else {
     texte += `\nPas de plan joint.\n`;
   }
-  for (const p of visite.pieces) {
-    texte += `\n=== ${p.nom} ===\n${(p.texte || "").trim() || "(pas de dictée)"}\n`;
+  const photosDe = async (p, nom) => {
     const noms = [];
     let i = 1;
     for (const phId of p.photos) {
       const ph = await lire("photos", phId);
       if (!ph) continue;
-      const n = unique(`${nomFichier(visite.dossier)}_${nomFichier(p.nom)}_${i++}.jpg`);
+      const n = unique(`${nomFichier(visite.dossier)}_${nomFichier(nom)}_${i++}.jpg`);
       fichiers.push(new File([ph.blob], n, { type: "image/jpeg" }));
       noms.push(n);
     }
+    return noms;
+  };
+  // La dictée unique : toutes les pièces à la suite, c'est Claude qui les sépare
+  const dictee = visite.pieces.find(p => p.genre === "dictee");
+  if (dictee && rempli(dictee)) {
+    texte += `\n=== Dictée de la visite (toutes les pièces à la suite, à ranger par pièce) ===\n${(dictee.texte || "").trim() || "(pas de dictée, seulement des photos)"}\n`;
+    const noms = await photosDe(dictee, "Dictée");
+    if (noms.length) texte += `Photos : ${noms.join(", ")}\n`;
+  }
+  for (const p of visite.pieces) {
+    if (p.genre === "dictee") continue;
+    texte += `\n=== ${p.nom} ===\n${(p.texte || "").trim() || "(pas de dictée)"}\n`;
+    const noms = await photosDe(p, p.nom);
     if (noms.length) texte += `Photos : ${noms.join(", ")}\n`;
   }
   return { texte, fichiers };
