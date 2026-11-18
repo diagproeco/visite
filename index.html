@@ -30,6 +30,8 @@
   details.repli > div { margin-left:10px; margin-right:10px; }
   details.repli > .dedans { padding-bottom:10px; }
   .compte { font-weight:400; color:#5b636e; font-size:14px; margin-left:8px; white-space:nowrap; }
+  ol.etapes { margin:8px 0; padding-left:22px; }
+  ol.etapes li { margin:7px 0; }
   .btn.danger { background:#fff; color:var(--rouge); border:1px solid var(--rouge); font-weight:500; }
   .carte { border:1px solid var(--bord); border-radius:12px; padding:12px 14px; margin:10px 0; background:#fff; cursor:pointer; }
   .carte .t { font-weight:600; font-size:18px; }
@@ -96,11 +98,13 @@
 <input type="file" id="cameraPlan" accept="image/*" capture="environment" class="cache">
 
 <script>
-const VERSION = "6.2";
+const VERSION = "6.3";
 
 /* ---------- Où tourne l'appli ---------- */
 const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const EN_LIGNE = location.protocol === "http:" || location.protocol === "https:"; // appli installée depuis une adresse internet
+// iPhone : page ouverte ailleurs que dans Safari (Chrome, Google, Facebook, Messenger, Instagram…) ; l'icône ne s'installe bien que depuis Safari
+const HORS_SAFARI = IOS && /CriOS|FxiOS|EdgiOS|OPiOS|OPT\/|GSA\/|FBAN|FBAV|FB_IAB|Instagram|Line\/|MicroMessenger|Snapchat|LinkedInApp|DuckDuckGo/.test(navigator.userAgent);
 const estInstallee = () => { try { return navigator.standalone === true || matchMedia("(display-mode: standalone)").matches; } catch (e) { return false; } };
 
 /* ---------- Stockage dans le téléphone (IndexedDB) ---------- */
@@ -363,7 +367,24 @@ function majInstall() {
       majInstall();
     };
   } else if (IOS) {
-    z.innerHTML = `<div class="alerte">Pour avoir l'icône sur l'écran de l'iPhone : ouvre cette page dans Safari, touche le bouton Partager (le carré avec une flèche vers le haut), puis « Sur l'écran d'accueil ». Ouvre ensuite toujours l'appli par son icône.</div>`;
+    // Étapes de Safari sur un iPhone récent (barre compacte : Partager et « Sur l'écran d'accueil » sont rangés), avec le chemin des iPhone plus anciens
+    z.innerHTML = `<div class="alerte"><b>Pour avoir l'icône de l'appli sur l'iPhone</b> (une seule fois, dans Safari) :
+      ${HORS_SAFARI ? `<div style="margin-top:8px"><b>Cette page n'est pas ouverte dans Safari.</b> Commence par copier le lien (bouton plus bas) et colle-le dans Safari.</div>` : ""}
+      <ol class="etapes">
+        <li>Ouvre le menu Partager. Sur un iPhone récent : en bas, à droite de l'adresse, touche le bouton rond avec trois points, puis « Partager ». Sur un iPhone plus ancien : touche directement le carré avec une flèche vers le haut.</li>
+        <li>Dans la liste, touche « Sur l'écran d'accueil ». Si tu ne la vois pas, touche d'abord « En voir plus ».</li>
+        <li>Touche « Ajouter », en laissant « Ouvrir comme app web » activé.</li>
+        <li>Ouvre ensuite toujours l'appli par son icône « Visite ».</li>
+      </ol>
+      Pas de ligne « Sur l'écran d'accueil » ? La page est ouverte dans une autre appli (WhatsApp, Messenger, mail…) : copie le lien et colle-le dans Safari.
+      <button class="btn sec" id="copierLien">Copier le lien de l'appli</button></div>`;
+    const b = document.getElementById("copierLien");
+    b.onclick = () => {
+      const lien = location.origin + location.pathname;
+      const montrer = () => { b.textContent = lien; }; // copie refusée par le téléphone : le lien s'affiche pour le recopier
+      try { navigator.clipboard.writeText(lien).then(() => { b.textContent = "Lien copié : colle-le dans Safari"; }, montrer); }
+      catch (e) { montrer(); }
+    };
   } else {
     z.innerHTML = `<div class="alerte">Pour avoir l'icône sur l'écran du téléphone : menu ⋮ de Chrome, puis « Ajouter à l'écran d'accueil » ou « Installer l'application ».</div>`;
   }
